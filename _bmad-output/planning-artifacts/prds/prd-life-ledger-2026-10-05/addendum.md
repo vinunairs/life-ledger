@@ -22,7 +22,7 @@ post → external Claude run → `ingest_draft` → review → confirm → outpu
 3. The two RPC contracts with JSON schemas:
    - `ingest_draft(post_id, entries, gaps)` — forces `status = draft` and default visibility; rejects any field without `source_span`; marks the post processed; rejects younger-child posts and private posts.
    - `save_output(person_id, kind, items)` — stores a new output version with cited entry IDs; rejects unconfirmed / archived citations.
-4. A `processing_queue` view (unprocessed posts, excluding the younger child) and an output-request queue.
+4. A `processing_queue` view (unprocessed posts, excluding the younger child and private posts) and an output-request queue.
 5. Offline queue design for quick post (local persistence, retry, idempotency so a post is never sent twice).
 6. Test plan.
 7. Leave out anything listed as v1.1 or v2.
