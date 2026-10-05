@@ -1,0 +1,8 @@
+.env
+.env.*
+supabase/.temp/
+supabase/seed.private.sql
+private/
+exports/
+*.local.md
+node_modules/
