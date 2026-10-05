@@ -20,7 +20,7 @@ post → external Claude run → `ingest_draft` → review → confirm → outpu
 1. Data model and migrations per spec §4, including the Common App field mapping and the per-child school calendar.
 2. RLS policy matrix with a test case per cell of PRD FR-6, plus the student-never-reads-parents_only test and the parent-cannot-confirm-student-reflection test.
 3. The two RPC contracts with JSON schemas:
-   - `ingest_draft(post_id, entries, gaps)` — forces `status = draft` and default visibility; rejects any field without `source_span`; marks the post processed; rejects younger-child posts.
+   - `ingest_draft(post_id, entries, gaps)` — forces `status = draft` and default visibility; rejects any field without `source_span`; marks the post processed; rejects younger-child posts and private posts.
    - `save_output(person_id, kind, items)` — stores a new output version with cited entry IDs; rejects unconfirmed / archived citations.
 4. A `processing_queue` view (unprocessed posts, excluding the younger child) and an output-request queue.
 5. Offline queue design for quick post (local persistence, retry, idempotency so a post is never sent twice).
