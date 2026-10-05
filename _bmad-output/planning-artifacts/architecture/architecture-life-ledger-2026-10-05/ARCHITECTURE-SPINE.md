@@ -73,13 +73,13 @@ Dependency rule: adapters depend on the core; the core depends on nothing outsid
 - **Binds:** every table, view and function; FR-6; NFR-SEC-1
 - **Prevents:** Postgres/Supabase defaults (`EXECUTE` to `PUBLIC`, owner-rights views, auto-granted tables) opening paths no AD intended; two features mutating one table by different paths.
 - **Rule:**
-  1. Migration 00 runs `alter default privileges in schema ll, ll_proc, ll_ops revoke all on functions from public` and revokes default table privileges; every object is then granted explicitly. Every function is followed by `revoke all … from public, anon, authenticated` and the one grant it needs.
+  1. Migration 00 runs `alter default privileges in schema ll, ll_proc, ll_ops revoke all on functions from public` and revokes default table privileges; every object is then granted explicitly. Every function is followed by `revoke all … from public, anon, authenticated` and the one grant it needs. Policy helpers (`require_member`, `is_parent`, `is_owner`, `my_person`, `can_read`, `entry_visible`, `post_visible`, `can_act`, `upload_allowed`) are granted `execute` to `authenticated`, because RLS policies run as the caller. `ll.badge_for` (digest) and `ll_ops.ops_health` (keepalive and health) are granted to `service_role` only.
   2. Tables in `ll` have RLS enabled with `SELECT` policies only; there are no client `INSERT/UPDATE/DELETE` policies. `authenticated` gets `SELECT` only on the tables listed in `rls-matrix.md` §2, never on `all tables in schema`.
   3. Every client mutation is a `security definer` function in `ll`, `set search_path = ''`, schema-qualified names, granted to `authenticated` only. `rpc-contracts.md` §4 is the exhaustive list; a new mutation adds a row there and a new function, never a write policy.
   4. Every client RPC's first statement is `perform ll.require_member()` (raises `session-expired` / `not-a-member`); the second resolves its target to an entry, post or output and calls `ll.can_act(...)` (AD-4), raising `forbidden`. No RPC reads `ll.members` directly for authorization.
-  5. Read RPCs are `security invoker` unless they must aggregate across visibility (`get_output`, `my_badge`), in which case they apply `can_read` per row.
+  5. Read RPCs are `security invoker` unless they must aggregate across visibility or see archived rows (`get_output`, `my_badge`, `archive_list`), in which case they apply `can_read` per row.
   6. A function never returns a row the caller could not `SELECT`.
-  7. `edit_entry` accepts only registry fields plus `_title`, `_dates`; any other key (`type`, `person_id`, `visibility`, `status`, `speaker`, `confirmed_*`, `archived_at`, …) is `forbidden-key`. `type`, `person_id`, `source_post_id` are immutable after insert (except via the `_person` gap, AD-9). `speaker` is set at creation; only the student may change a reflection whose speaker is the student, and any speaker change clears confirmation.
+  7. `edit_entry` accepts only registry fields plus `_title`, `_dates`; any other key (`type`, `person_id`, `visibility`, `status`, `speaker`, `confirmed_*`, `archived_at`, …) is `forbidden-key`. `type`, `person_id`, `source_post_id` are immutable after insert (except via the `_person` gap, AD-9). `speaker` is set at creation and is a forbidden key for everyone except the student editing a reflection whose speaker is the student; any speaker change clears confirmation.
   8. Only the Data API exposes `ll`; `pg_graphql` is disabled and no Realtime publication includes `ll`, `ll_proc` or `ll_ops`.
 
   A pgTAP catalog test asserts every function ACL and every view's `security_invoker` against an allow-list (`test-plan.md`).
@@ -90,11 +90,11 @@ Dependency rule: adapters depend on the core; the core depends on nothing outsid
 - **Prevents:** the processing run reading or writing outside its contract; clients calling processor functions; model text from one post leaking into another.
 - **Rule:**
   1. Role `ll_processor` (`nologin`, `noinherit`, no `bypassrls`) has `usage` on `ll_proc` only, `select` on `ll_proc.processing_queue`, `ll_proc.processor_context`, `ll_proc.output_request_queue`, and `execute` on `ll_proc.ingest_draft(jsonb)` and `ll_proc.save_output(jsonb)`. Nothing else.
-  2. Every SQL batch the run sends is wrapped `begin; set local role ll_processor; set local ll.run_class = '<family|parents>'; …; commit;`. This is the guide's first rule, and the golden-post test checks `current_user`. The processor functions check `current_user = 'll_processor'` and refuse otherwise.
+  2. Every SQL batch the run sends is wrapped `begin; set local role ll_processor; set local ll.run_class = '<family|parents>'; …; commit;`. This is the guide's first rule, and the golden-post test checks `current_user`. The processor functions are `security definer` (so `current_user` is their owner) and therefore check `current_setting('role') = 'll_processor'`, refusing otherwise; a pgTAP test proves the check.
   3. Payloads are dollar-quoted with a random tag (`$p<random>$…$p<random>$::jsonb`), never single-quoted.
   4. Payloads are validated against the JSON schemas in `rpc-contracts.md` with `pg_jsonschema`. Keys `status`, `visibility`, `confirmed_by`, `confirmed_at`, `id`, `author_id` are rejected (`forbidden-key`), not ignored.
-  5. Provenance: `title_span` is required; for text-kind fields `v` must be a substring of its span quote (normalization only for enum, number and date kinds); image spans are rejected in v1; required-field gap questions come from the registry, never from the model.
-  6. Runs are split by visibility class. The `family` run sees only posts, entries and requests of visibility family or shareable; the `parents` run sees only parents_only. The views read the class from `ll.run_class`, so one context window never mixes classes. There are two scheduled tasks, both at 8:45 pm Eastern, family first.
+  5. Provenance: `title_span` is required; for text-kind fields `v` must be a substring of its span quote (normalization only for enum, number, date and bool kinds; a `url_or_file` URL must appear in the quote or the post's links); image spans are rejected in v1; required-field gap questions come from the registry, never from the model.
+  6. Runs are split by visibility class. The `family` run sees only posts, entries and requests of visibility family or shareable. The `parents` run sees parents_only posts and entries, plus confirmed family entries only inside `recommender_pointers` requests (FR-40), whose output is itself parents_only. The views read the class from `ll.run_class`, so one context window never mixes classes. There are two scheduled tasks, both at 8:45 pm Eastern, family first.
   7. Errors are returned as `{ok:false, code}`, not raised, so attempt counts persist. Every processor-caused error counts; after 2 attempts the post becomes `needs_manual` (FR-16).
 
   **Residual risk (recorded):** the Supabase connector itself has full project access, so step 2 is guide-enforced. Mitigations: the guide rule, the golden-post test, and a connector scoped to the life-ledger project only. See D-9.
@@ -232,8 +232,8 @@ Dependency rule: adapters depend on the core; the core depends on nothing outsid
 - **Binds:** FR-10, NFR-OBS-1, SM-1 … SM-7, SM-C1 … SM-C3
 - **Prevents:** metrics from different sources; clients emitting server events; third-party scripts.
 - **Rule:**
-  - The client logs through `ll.log_event(name, props)` with a client allow-list (`post_opened`, `post_submitted`, `post_duration`, `queue_flushed`) and bounded numeric or enum props, never free text.
-  - Server jobs write server names (`accuracy_check`, `purge_run`, `digest_sent`, `backup_run`, `status_drift`, `health`) directly.
+  - The client logs through `ll.log_event(name, props)` with a client allow-list (`post_opened`, `post_submitted`, `queue_flushed`) and bounded numeric or enum props, never free text.
+  - `post_duration` is written only by `create_post` on an actual insert (AD-12). Server jobs write server names (`accuracy_check`, `purge_run`, `digest_sent`, `backup_run`, `status_drift`, `health`) directly.
   - Metric definitions are views in `ll_ops`, read only by the ops workflow or the owner-only RPC `ll.metrics()`.
 
 ### AD-17 — Files: origin, links and storage policy
