@@ -7,7 +7,7 @@ paradigm: 'Thin client over a policy-enforcing database (ports and adapters; Pos
 scope: 'Family Life Ledger v1, milestones M1–M3: web client, Supabase database and storage, the external Claude processing adapter, scheduled operations'
 status: final
 created: '2026-10-05'
-updated: '2026-10-05'
+updated: '2026-10-06'
 binds: [FR-1..FR-43, NFR-SEC-1, NFR-SEC-2, NFR-PERF-1, NFR-PERF-2, NFR-REL-1, NFR-A11Y-1, NFR-PLAT-1, NFR-AUD-1, NFR-OBS-1]
 sources:
   - _bmad-output/planning-artifacts/prds/prd-life-ledger-2026-10-05/prd.md
@@ -110,7 +110,7 @@ Dependency rule: adapters depend on the core; the core depends on nothing outsid
   4. `entries.author_id` (not null) is the source post's author for ingested entries and the caller for manual ones. "Own" in FR-6 always means `author_id = auth.uid()`.
   5. Entry visibility at insert = `narrowest(type default, post.visibility)`. `set_visibility` on an entry narrows freely and widens only up to its post. Narrowing a post narrows all its entries in the same transaction (reason `visibility`). A student cannot choose parents_only. Fixed rules (parent_note = parents_only; score/academic never shareable) are CHECK constraints.
   6. Client-readable views are `with (security_invoker = true)`. `ll_proc` and `ll_ops` are not exposed to the Data API and have no grants to `anon` or `authenticated`.
-  7. Bulk reads of a person's data (`export_person`, digest counts) return only what the requesting login can read (see Open Question 2).
+  7. Bulk reads of a person's data (`export_person`, digest counts) return only what the requesting login can read (Owner Decision 2).
 
 ### AD-5 — Status is derived; gaps have one writer
 
@@ -153,7 +153,7 @@ Dependency rule: adapters depend on the core; the core depends on nothing outsid
   - `create_post` refuses `ai_excluded` persons; the UI uses `create_milestone` instead.
   - Persons are presented to the model by role label ("Student"), never by `display_label`.
   - Answering a `_person` gap on an ingested entry refuses `ai_excluded` persons.
-  - A student post that mentions the younger child still reaches the model in full; see Open Question 1.
+  - A student post that mentions the younger child still reaches the model in full (accepted residual; Owner Decision 1).
 
 ### AD-10 — Archive, purge and redaction
 
@@ -427,7 +427,7 @@ life-ledger/
 - **D-8 Retention of backups beyond 12 weeks:** revisit after the first year.
 - **D-9 Role-scoped processor connection:** if the owner gets a connector that can log in as a specific role, give `ll_processor` its own login and drop the `set local role` wrapper.
 
-## Open Questions (owner)
+## Owner Decisions (2026-10-06)
 
-1. **Mixed-child posts.** A post about the student that mentions the younger child still sends that text to the model; ingest only refuses entries about her. Accept this as a residual risk, or have the post screen ask parents to keep younger-child details out of student posts? The default until answered is an on-screen reminder when the post text names the younger child.
-2. **FR-42 export scope.** The architecture exports only what the requesting login can read (AD-4.7), which keeps the student's private entries out of a parent's export. Confirm the PRD wording change.
+1. **Mixed-child posts.** Accepted residual: a post about the student that mentions the younger child reaches the model in full; ingest refuses entries about her. The post screen shows a reminder when the post text names the younger child.
+2. **FR-42 export scope.** Exports contain only what the requesting login can read (AD-4.7); PRD FR-42 updated.

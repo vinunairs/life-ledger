@@ -2,7 +2,7 @@
 title: Family Life Ledger
 status: final
 created: 2026-10-05
-updated: 2026-10-05
+updated: 2026-10-06
 approved: 2026-10-05 (owner)
 sources:
   - docs/feature-doc-v2.md (source of truth)
@@ -566,10 +566,10 @@ Claude stores an output only through `save_output(person_id, kind, items)`.
 
 #### FR-42: One-tap person export
 
-A parent can export everything held about one person at any time.
+A login can export everything they can read about one person at any time.
 
 **Consequences (testable):**
-- The export contains every entry, version, gap, output version and file for that person in a readable format. Format: JSON plus original files in one archive.
+- The export contains every entry, version, gap, output version and file for that person **that the requesting login can read** (a parent's export never includes the student's private entries), in a readable format. Format: JSON plus original files in one archive.
 - The student can export his own profile, excluding parents_only rows.
 
 #### FR-43: Weekly encrypted backup
@@ -672,6 +672,8 @@ None blocks architecture. Each has an owner and a point at which it must be sett
 **Former phase-blockers**
 - **Q1 Raw post visibility** — a post carries its own visibility (default per FR-5); entries are never wider than their post; the timeline shows a post only to logins who can read it (FR-5, FR-8, FR-26).
 - **Q2 Private posts and processing** — private posts are excluded from the processing queue and rejected by the ingest function; they are processed only if the author widens visibility (FR-15, FR-16).
+- **FR-42 export scope (2026-10-06)** — exports contain only what the requesting login can read, consistent with FR-4.
+- **Mixed-child posts (2026-10-06)** — a student post naming the younger child still reaches the model; the post screen reminds parents to keep her details out of student posts.
 - **Q3 Status after ingest** — ingest writes draft; the system moves a draft with open required gaps to needs_detail in the same transaction (FR-16, FR-20).
 
 **Other additions to the spec**
